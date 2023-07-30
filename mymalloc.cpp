@@ -38,10 +38,9 @@ struct FreeHeader {
     FreeHeader* children[2];
 };
 
-struct AllocatedHeader {
+/*struct AllocatedHeader {
     RegionHeader header;
-    std::size_t extFlags;
-};
+};*/
 
 template <>
 struct AllocatorRegionTraits<RegionHeader> {
@@ -60,11 +59,10 @@ private:
     {
         switch (type) {
         case RegionType::SmallFree:
+        case RegionType::Allocated:
             return new(ptr) RegionHeader;
         case RegionType::Free:
             return ptr_cast<RegionHeader*>(new(ptr) FreeHeader);
-        case RegionType::Allocated:
-            return ptr_cast<RegionHeader*>(new(ptr) AllocatedHeader);
         }
     }
 
@@ -136,6 +134,7 @@ public:
     static auto Destroy(RegionHeader* region) -> void*
     {
         switch (GetType(region)) {
+            case Allocated:
             case SmallFree: {
                 auto ptr = As<unsigned char*>(region);
                 region->~RegionHeader();
@@ -145,12 +144,6 @@ public:
                 auto ptr = As<unsigned char*>(region);
                 auto rgn = ptr_cast<FreeHeader*>(region);
                 rgn->~FreeHeader();
-                return ptr;
-            }
-            case Allocated: {
-                auto ptr = As<unsigned char*>(region);
-                auto rgn = ptr_cast<AllocatedHeader*>(region);
-                rgn->~AllocatedHeader();
                 return ptr;
             }
         }

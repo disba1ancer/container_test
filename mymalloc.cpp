@@ -46,12 +46,12 @@ struct AllocatedHeader {
 template <>
 struct AllocatorRegionTraits<RegionHeader> {
     enum : std::size_t {
+        ChunkLogGranularity = 4,
         ChunkLogTreshold = 17,
         ChunkLogSize = 19,
-        ChunkLogGranularity = 4,
+        ChunkGranularity = std::size_t(1) << ChunkLogGranularity,
         ChunkTreshold = std::size_t(1) << ChunkLogTreshold,
         ChunkSize = std::size_t(1) << ChunkLogSize,
-        ChunkGranularity = std::size_t(1) << ChunkLogGranularity,
     };
 
     using FreeHeader = FreeHeader;
@@ -106,6 +106,7 @@ public:
         }
         region->size = firstSize / ChunkGranularity;
         auto second = Construct(ptr + firstSize, secondSize);
+        second->prev = region->size;
         second->isLast = region->isLast;
         region->isLast = false;
         if (!second->isLast) {
@@ -287,14 +288,10 @@ class MyAllocator {
     using SizeTree =
         container_test::intrusive::AVLTree<FreeHeader, Comparator, IdentityCastPolicy<FreeHeader>>;
 
-    auto AllocateFromFreeList(std::size_t size) -> SizeTree::Iterator
-    {
-        return freeList.LowerBound(size);
-    }
-
     auto AllocateRaw(std::size_t size) -> void*
     {
-        return VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        auto ptr = VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        return new(ptr) unsigned char[size];
     }
 
     void DeallocateRaw(void* ptr, std::size_t)
@@ -311,7 +308,7 @@ class MyAllocator {
     auto AllocateChunked(std::size_t size) -> Region*
     {
         size += RgTr::ChunkGranularity;
-        auto rgnIt = AllocateFromFreeList(size);
+        auto rgnIt = freeList.LowerBound(size);
         Region* rgn;
         if (rgnIt == freeList.End()) {
             auto ptr = AllocateRaw(ChunkSize);
@@ -380,7 +377,7 @@ public:
     void* Allocate(std::size_t size, std::size_t align)
     {
         Region* rgn;
-        size += RgTr::ChunkGranularity;
+        size += RgTr::ChunkGranularity - 1;
         size &= size ^ (RgTr::ChunkGranularity - 1);
         if (size < ChunkTreshold) {
             rgn = AllocateChunked(size);
@@ -444,14 +441,13 @@ void my_free(void* ptr)
 
 int main(int argc, char* argv[])
 {
-    using T = int;
-    auto pint = new(my_malloc(sizeof(T))) T{0};
+    auto pint = static_cast<int*>(my_malloc(sizeof(int)));
+    *pint = 0x55AA;
     myAllocator.DumpList();
-    void* p = my_malloc(0x20000);
+    void* p = my_malloc(0x1FFE0);
+    myAllocator.DumpList();
+    my_free(pint);
     myAllocator.DumpList();
     my_free(p);
-    myAllocator.DumpList();
-    pint->~T();
-    my_free(pint);
     myAllocator.DumpList();
 }

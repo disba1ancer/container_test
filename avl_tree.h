@@ -109,6 +109,7 @@ public:
 
     Iterator Erase(Iterator it)
     {
+        using Tr = AVLTreeNodeTraits<NodeType>;
         using H = TraitsHelper;
         auto erasedNode = H(it++.current);
         bool a = erasedNode.Children(0).Parent() == erasedNode;
@@ -120,12 +121,15 @@ public:
             };
             bool c = erasedNode.Parent().Children(0) == erasedNode;
             if (a == b) {
-                bool c = erasedNode.Children(0) == erasedNode.Parent();
+                bool c = erasedNode.Children(1) != erasedNode.Parent();
                 erasedNode.Parent().Children(c) = erasedNode.Children(c);
             } else {
                 children[b].Parent() = erasedNode.Parent();
                 children[b].Parent().Children(a) = children[b];
                 children[b].Children(a) = children[a];
+            }
+            if (!a && erasedNode.Children(0) == AddressOf(sentinel)) {
+                Tr::SetChild(sentinel, 1, erasedNode.Children(1));
             }
             RebalanceTreeE(erasedNode.Parent(), c);
             return it;
@@ -170,8 +174,7 @@ public:
 
     std::size_t Erase(T& elem)
     {
-        using cp = CastPolicy;
-        Erase(Iterator(cp::ToNode(AddressOf(elem))));
+        Erase(IteratorTo(elem));
         return 1;
     }
 
@@ -314,7 +317,7 @@ private:
         node.Children(rightInsert) = parentNode.Children(rightInsert);
         if (node.Children(0) == AddressOf(sentinel)) {
             Tr::SetChild(sentinel, 1, node);
-        }
+        } // TODO: sentinel update without branch
         parentNode.Children(rightInsert) = node;
         RebalanceTreeI(parentNode, rightInsert);
         return { node };

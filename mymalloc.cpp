@@ -162,6 +162,9 @@ public:
 
     static auto GetNext(RegionHeader* header) -> RegionHeader*
     {
+        if (header->isLast) {
+            return header;
+        }
         auto offset = GetSize(header);
         return ApplyOffset<RegionHeader>(header, std::ptrdiff_t(offset));
     }
@@ -175,11 +178,6 @@ public:
     {
         auto offset = GetPrevSize(header);
         return ApplyOffset<RegionHeader>(header, -std::ptrdiff_t(offset));
-    }
-
-    static auto IsLast(RegionHeader* header) -> bool
-    {
-        return header->isLast;
     }
 
     static auto AsFreeHeader(RegionHeader* header) -> FreeHeader*
@@ -300,7 +298,6 @@ class MyAllocator {
 
     auto AllocateChunked(std::size_t size) -> Region*
     {
-        size += RgTr::ChunkGranularity;
         auto rgnIt = freeList.LowerBound(size);
         Region* rgn;
         if (rgnIt == freeList.End()) {
@@ -315,19 +312,21 @@ class MyAllocator {
         }
         if (RgTr::GetSize(rgn) > size) {
             rgn = RgTr::Split(rgn, size);
-            freeList.Insert(rgnIt, *RgTr::AsFreeHeader(RgTr::GetNext(rgn)));
+            auto rgn2 = RgTr::GetNext(rgn);
+            if (RgTr::GetType(rgn2) == RegionType::Free) {
+                freeList.Insert(rgnIt, *RgTr::AsFreeHeader(rgn2));
+            }
         }
         return rgn;
     }
 
     auto AllocateBig(std::size_t size) -> Region*
     {
-        size += RgTr::ChunkGranularity;
         auto ptr = AllocateRaw(size);
         if (ptr == nullptr) {
             return nullptr;
         }
-        Region* rgn = RgTr::ConstructChunk(ptr, size);
+        Region* rgn = RgTr::ConstructChunk(ptr, size); // TODO: size has no upper limit
         return rgn;
     }
 
@@ -341,14 +340,13 @@ class MyAllocator {
             }
             rgn = RgTr::MergeWithNext(neightbour);
         }
-        if (!RgTr::IsLast(rgn)) {
-            neightbour = RgTr::GetNext(rgn);
-            if (RgTr::GetType(neightbour) != RegionType::Allocated) {
-                if (neightbourType == RegionType::Free) {
-                    freeList.Erase(*RgTr::AsFreeHeader(neightbour));
-                }
-                rgn = RgTr::MergeWithNext(rgn);
+        neightbour = RgTr::GetNext(rgn);
+        neightbourType = RgTr::GetType(neightbour);
+        if (neightbour != rgn && neightbourType != RegionType::Allocated) {
+            if (neightbourType == RegionType::Free) {
+                freeList.Erase(*RgTr::AsFreeHeader(neightbour));
             }
+            rgn = RgTr::MergeWithNext(rgn);
         }
         auto size = RgTr::GetSize(rgn);
         if (size >= ChunkSize) {
@@ -369,8 +367,11 @@ public:
     {}
     void* Allocate(std::size_t size, std::size_t align)
     {
+        if (size == 0) {
+            return nullptr;
+        }
         Region* rgn;
-        size += RgTr::ChunkGranularity - 1;
+        size += 2 * RgTr::ChunkGranularity - 1;
         size &= size ^ (RgTr::ChunkGranularity - 1);
         if (size < ChunkTreshold) {
             rgn = AllocateChunked(size);
@@ -386,8 +387,11 @@ public:
     }
     void Deallocate(void* ptr)
     {
+        if (ptr == nullptr) {
+            return;
+        }
         auto rgn = ApplyOffset<Region>(ptr, -std::ptrdiff_t(RgTr::ChunkGranularity));
-        RgTr::Retype(rgn, RegionType::Free);
+        RgTr::Retype(rgn, RegionType::Free); // TODO: Can region be small?
         if (RgTr::GetSize(rgn) < ChunkTreshold) {
             DeallocateChunked(rgn);
         } else {

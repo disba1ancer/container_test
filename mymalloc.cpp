@@ -25,11 +25,11 @@ template <typename T>
 struct AllocatorRegionTraits;
 
 struct RegionHeader {
-    std::size_t type:3;
-    std::size_t balance:3;
+    std::size_t type:2;
+    std::size_t balance:2;
     std::size_t isLast:1;
     std::size_t size:20;
-    std::size_t prev:20;
+    std::size_t prev:39;
 };
 
 struct FreeHeader {

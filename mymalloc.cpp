@@ -245,35 +245,6 @@ struct container_test::intrusive::AVLTreeNodeTraits<FreeHeader> {
 template <typename T>
 struct alignas(16) AllocatorChunk;
 
-//node {
-//    atomic next;
-//}
-
-//newNode.next = end;
-//prev: pPtr = tail;
-//if !cas(pPtr.next, end, newNode) goto prev;
-//tail = newNode;
-
-//cur = end.next;
-//if cur == end return;
-//nPtr = cur;
-//swp(cur.next, nPtr);
-//cas(tail, cur, nPtr);
-//end.next = nPtr;
-
-//newNode.next = end;
-//pPtr = newNode;
-//swp(tail, pPtr);
-//if !cas(pPtr.next, end, newNode) end.next = newNode
-
-//cur = end;
-//swp(end.next, cur);
-//if cur == end return;
-//nPtr = cur
-//swp(cur.next, nPtr);
-//if cas(tail, cur, nPtr) end.next = nPtr
-
-
 template <typename T>
 class MyAllocator;
 

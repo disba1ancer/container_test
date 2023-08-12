@@ -12,14 +12,14 @@ struct OCQueueNode {
 // One consumer multiple producer queue
 struct OCQueue {
     OCQueue() noexcept :
-        sentinel{&guard},
-        guard{&sentinel},
+        guard{nullptr},
+        head{&guard},
         tail(&guard),
         size(0)
     {}
     void Push(OCQueueNode* newNode) noexcept
     {
-        newNode->next = &sentinel;
+        newNode->next = nullptr;
         auto pPtr = tail.exchange(newNode, std::memory_order_acq_rel);
         pPtr->next = newNode;
         size.fetch_add(1, std::memory_order_release);
@@ -31,7 +31,9 @@ struct OCQueue {
         }
         while (true) {
             size.fetch_sub(1, std::memory_order_acquire);
-            auto cur = PopUnrestr();
+            auto cur = head;
+            auto nPtr = cur->next;
+            head = nPtr;
             if (cur != &guard) {
                 return cur;
             }
@@ -39,15 +41,8 @@ struct OCQueue {
         }
     }
 private:
-    auto PopUnrestr() noexcept -> OCQueueNode*
-    {
-        auto cur = sentinel.next;
-        auto nPtr = cur->next;
-        sentinel.next = nPtr;
-        return cur;
-    }
-    OCQueueNode sentinel;
     OCQueueNode guard;
+    OCQueueNode* head;
     std::atomic<OCQueueNode*> tail;
     std::atomic_size_t size;
 };

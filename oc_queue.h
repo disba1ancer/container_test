@@ -31,7 +31,7 @@ struct OCQueue {
             return last;
         }())
     {}
-    void Push(OCQueueNode* newNode)
+    void Push(OCQueueNode* newNode) noexcept
     {
         newNode->next.store(&sentinel, std::memory_order_relaxed);
         auto pPtr = newNode;
@@ -43,16 +43,16 @@ struct OCQueue {
             pPtr->next.store(newNode, std::memory_order_relaxed);
         }
     }
-    auto Pop() -> OCQueueNode*
+    auto Pop() noexcept -> OCQueueNode*
     {
         auto cur = sentinel.next.exchange(&sentinel, std::memory_order_relaxed);
         if (cur == &sentinel) return nullptr;
-        auto nPtr = cur->next.exchange(cur, std::memory_order_relaxed);
+        auto nPtr = cur->next.exchange(cur, std::memory_order_acquire);
         auto expect = cur;
         if (tail.compare_exchange_strong(
-            expect, nPtr, std::memory_order_relaxed, std::memory_order_acquire
+            expect, nPtr, std::memory_order_relaxed, std::memory_order_relaxed
         )) {
-            sentinel.next.store(nPtr, std::memory_order_acquire);
+            sentinel.next.store(nPtr, std::memory_order_relaxed);
         }
         return cur;
     }

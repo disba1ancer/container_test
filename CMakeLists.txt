@@ -26,6 +26,7 @@ add_executable(container_test
     list_node.h
     main.cpp
     node.h
+    oc_queue.h
     slist.h
     slist_node.h
     util.h
@@ -41,6 +42,7 @@ add_executable(malloc_test
     list_node.h
     mymalloc.cpp
     node.h
+    oc_queue.h
     slist.h
     slist_node.h
     util.h

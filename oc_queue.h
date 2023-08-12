@@ -6,58 +6,50 @@
 namespace container_test {
 
 struct OCQueueNode {
-    std::atomic<OCQueueNode*> next;
+    OCQueueNode* next;
 };
 
 // One consumer multiple producer queue
 struct OCQueue {
     OCQueue() noexcept :
-        sentinel{{&sentinel}},
-        tail(&sentinel)
-    {}
-    OCQueue(OCQueue&& oth) noexcept :
-        sentinel{{[this, &oth]
-        {
-            auto beg = oth.sentinel.next.load(std::memory_order_relaxed);
-            if (beg == &oth.sentinel) {
-                return &sentinel;
-            }
-            return beg;
-        }()}},
-        tail([this, &oth]
-        {
-            auto last = oth.tail.load(std::memory_order_relaxed);
-            last->next.store(&sentinel);
-            return last;
-        }())
+        sentinel{&guard},
+        guard{&sentinel},
+        tail(&guard),
+        size(0)
     {}
     void Push(OCQueueNode* newNode) noexcept
     {
-        newNode->next.store(&sentinel, std::memory_order_relaxed);
-        auto pPtr = tail.exchange(newNode, std::memory_order_release);
-        auto end = &sentinel;
-        if (!sentinel.next.compare_exchange_strong(
-            end, newNode, std::memory_order_relaxed, std::memory_order_relaxed
-        )) {
-            pPtr->next.store(newNode, std::memory_order_relaxed);
-        }
+        newNode->next = &sentinel;
+        auto pPtr = tail.exchange(newNode, std::memory_order_acq_rel);
+        pPtr->next = newNode;
+        size.fetch_add(1, std::memory_order_release);
     }
     auto Pop() noexcept -> OCQueueNode*
     {
-        auto cur = sentinel.next.exchange(&sentinel, std::memory_order_relaxed);
-        if (cur == &sentinel) return nullptr;
-        auto nPtr = cur->next.exchange(cur, std::memory_order_acquire);
-        auto expect = cur;
-        if (tail.compare_exchange_strong(
-            expect, nPtr, std::memory_order_relaxed, std::memory_order_relaxed
-        )) {
-            sentinel.next.store(nPtr, std::memory_order_relaxed);
+        if (size.load(std::memory_order_relaxed) == 0) {
+            return nullptr;
         }
-        return cur;
+        while (true) {
+            size.fetch_sub(1, std::memory_order_acquire);
+            auto cur = PopUnrestr();
+            if (cur != &guard) {
+                return cur;
+            }
+            Push(&guard);
+        }
     }
 private:
+    auto PopUnrestr() noexcept -> OCQueueNode*
+    {
+        auto cur = sentinel.next;
+        auto nPtr = cur->next;
+        sentinel.next = nPtr;
+        return cur;
+    }
     OCQueueNode sentinel;
+    OCQueueNode guard;
     std::atomic<OCQueueNode*> tail;
+    std::atomic_size_t size;
 };
 
 }

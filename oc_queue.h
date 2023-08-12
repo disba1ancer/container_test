@@ -34,8 +34,7 @@ struct OCQueue {
     void Push(OCQueueNode* newNode) noexcept
     {
         newNode->next.store(&sentinel, std::memory_order_relaxed);
-        auto pPtr = newNode;
-        tail.exchange(pPtr, std::memory_order_release);
+        auto pPtr = tail.exchange(newNode, std::memory_order_release);
         auto end = &sentinel;
         if (!sentinel.next.compare_exchange_strong(
             end, newNode, std::memory_order_relaxed, std::memory_order_relaxed

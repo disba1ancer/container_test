@@ -16,7 +16,14 @@ struct OCQueue {
         tail(&sentinel)
     {}
     OCQueue(OCQueue&& oth) noexcept :
-        sentinel{{oth.sentinel.next.load(std::memory_order_relaxed)}},
+        sentinel{{[this, &oth]
+        {
+            auto beg = oth.sentinel.next.load(std::memory_order_relaxed);
+            if (beg == &oth.sentinel) {
+                return &sentinel;
+            }
+            return beg;
+        }()}},
         tail([this, &oth]
         {
             auto last = oth.tail.load(std::memory_order_relaxed);

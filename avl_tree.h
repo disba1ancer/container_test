@@ -24,9 +24,9 @@ concept Comparator = requires (const Key t1, const Key t2, Comp c)
 template <
     typename T,
     detail::Comparator<T> Comp,
-    typename CastPolicyGen = BaseClassCastPolicy2<AVLTreeNode<>, T>
+        typename CastPolicyGen = BaseClassCastPolicy<AVLTreeNode<>, T>
 >
-class AVLTree : detail::ContainerNodeRequirments2<T, CastPolicyGen> {
+class AVLTree : detail::ContainerNodeRequirments<T, CastPolicyGen> {
 public:
     using CastPolicy = CastPolicyGen;
     using NodeType = typename CastPolicyGen::NodeType;

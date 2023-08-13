@@ -10,27 +10,8 @@ namespace container_test::intrusive {
 template <typename Tag = void>
 class BasicNode {};
 
-/*template <typename Tag>
-struct BaseClassCastPolicy {
-    template <typename T, template<typename = void> typename NodeType>
-        requires (std::derived_from<T, NodeType<Tag>>)
-    struct Policy {
-        static constexpr
-        T* GetPtrFromHeader(NodeType<>* header) noexcept
-        {
-            return static_cast<T*>(static_cast<NodeType<Tag>*>(header));
-        }
-
-        static constexpr
-        auto GetHeaderFromPtr(T* ref) noexcept -> NodeType<>*
-        {
-            return static_cast<NodeType<Tag>*>(ref);
-        }
-    };
-};*/
-
 template <typename NodeTypeArg, typename ItemType>
-struct BaseClassCastPolicy2 {
+struct BaseClassCastPolicy {
     using NodeType = NodeTypeArg;
     static auto FromNode(NodeType* node) noexcept -> ItemType*
     {
@@ -48,15 +29,15 @@ template <typename T>
 concept StandardLayout = std::is_standard_layout_v<T>;
 
 template <typename CP, typename T>
-concept CastPolicy2 =
+concept CastPolicy =
 requires { typename CP::NodeType; } &&
 requires(T* t, typename CP::NodeType* n) {
     { CP::ToNode(t) } noexcept -> std::same_as<typename CP::NodeType*>;
     { CP::FromNode(n) } noexcept -> std::same_as<T*>;
 };
 
-template <typename T, detail::CastPolicy2<T> CP>
-class ContainerNodeRequirments2 {};
+template <typename T, detail::CastPolicy<T> CP>
+class ContainerNodeRequirments {};
 
 template <typename T>
 T* Deref(T* t) noexcept {

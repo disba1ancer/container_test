@@ -8,11 +8,11 @@
 
 namespace container_test::intrusive {
 
-template <typename T, typename CastPolicyGen = BaseClassCastPolicy2<SListNode<>, T>>
+template <typename T, typename CastPolicyGen = BaseClassCastPolicy<SListNode<>, T>>
 class SList;
 
 template <typename T, typename CastPolicyGen>
-class SList : detail::ContainerNodeRequirments2<T, CastPolicyGen> {
+class SList : detail::ContainerNodeRequirments<T, CastPolicyGen> {
     using CastPolicy = CastPolicyGen;
     using NodeType = typename CastPolicy::NodeType;
     using NodeTraits = SListNodeTraits<NodeType>;

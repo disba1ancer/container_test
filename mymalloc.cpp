@@ -4,28 +4,18 @@
 #define NOMINMAX 1
 #include <windows.h>
 #include <utility>
-#include "avl_tree.h"
+#include "allocator.h"
 #include "node.h"
-
-#define AddressOf std::addressof
 
 using container_test::ptr_cast;
 using container_test::As;
 using container_test::ApplyOffset;
 using container_test::intrusive::IdentityCastPolicy;
+using kernel::memory::AllocatorRegionTraits;
+using kernel::memory::Allocator;
 
 void* my_malloc(std::size_t size);
 void my_free(void* ptr);
-
-enum RegionType {
-    Free,
-    SmallFree,
-    Allocated,
-    BigAllocated
-};
-
-template <typename T>
-struct AllocatorRegionTraits;
 
 struct RegionHeader {
     std::size_t type:2;
@@ -280,172 +270,7 @@ struct container_test::intrusive::AVLTreeNodeTraits<FreeHeader> {
     }
 };
 
-template <typename T>
-class MyAllocator;
-
-template <typename T>
-class MyAllocator {
-    using Region = T;
-    using RgTr = AllocatorRegionTraits<T>;
-    using FreeHeader = typename RgTr::FreeHeader;
-    static constexpr auto ChunkTreshold = RgTr::ChunkTreshold;
-    static constexpr auto ChunkSize = RgTr::ChunkSize;
-
-    struct Comparator {
-        constexpr
-        bool operator()(const FreeHeader& a, const FreeHeader& b) const
-        {
-            auto aSize = RgTr::GetSize(RgTr::FromFreeHeader(const_cast<FreeHeader*>(AddressOf(a))));
-            auto bSize = RgTr::GetSize(RgTr::FromFreeHeader(const_cast<FreeHeader*>(AddressOf(b))));
-            return aSize < bSize;
-        }
-        constexpr
-        bool operator()(const FreeHeader& a, std::size_t size) const
-        {
-            auto aSize = RgTr::GetSize(RgTr::FromFreeHeader(const_cast<FreeHeader*>(AddressOf(a))));
-            return aSize < size;
-        }
-        constexpr
-        bool operator()(std::size_t size, const FreeHeader& b) const
-        {
-            auto bSize = RgTr::GetSize(RgTr::FromFreeHeader(const_cast<FreeHeader*>(AddressOf(b))));
-            return size < bSize;
-        }
-    };
-
-    using SizeTree = container_test::intrusive::AVLTree<
-        FreeHeader, Comparator, IdentityCastPolicy<FreeHeader>
-    >;
-
-    auto AllocateChunked(std::size_t size, std::size_t align) -> Region*
-    {
-        auto rgnIt = freeList.LowerBound(size + align - RgTr::ChunkGranularity);
-        Region* rgn;
-        if (rgnIt == freeList.End()) {
-            rgn = RgTr::AllocateChunk(ChunkSize, RgTr::ChunkGranularity);
-            if (rgn == nullptr) {
-                return nullptr;
-            }
-            rgn = RgTr::Retype(rgn, RegionType::SmallFree);
-        } else {
-            rgn = RgTr::FromFreeHeader(rgnIt.operator->());
-            freeList.Erase(rgnIt++);
-        }
-        auto offset = ptr_cast<std::uintptr_t>(rgn) & (align - 1);
-        auto allocStartOffset = align - offset - RgTr::ChunkGranularity;
-        if (allocStartOffset > 0) {
-            rgn = RgTr::Split(rgn, allocStartOffset);
-            if (RgTr::GetType(rgn) == RegionType::Free) {
-                freeList.Insert(rgnIt, *RgTr::AsFreeHeader(rgn));
-            }
-            rgn = RgTr::GetNext(rgn);
-        }
-        if (RgTr::GetSize(rgn) > size) {
-            rgn = RgTr::Split(rgn, size);
-            auto rgn2 = RgTr::GetNext(rgn);
-            if (RgTr::GetType(rgn2) == RegionType::Free) {
-                freeList.Insert(rgnIt, *RgTr::AsFreeHeader(rgn2));
-            }
-        }
-        return RgTr::Retype(rgn, RegionType::Allocated);
-    }
-
-    void DeallocateChunked(Region* rgn)
-    {
-        rgn = RgTr::Retype(rgn, RegionType::Free);
-        auto neightbour = RgTr::GetPrev(rgn);
-        auto neightbourType = RgTr::GetType(neightbour);
-        if (neightbour != rgn && neightbourType != RegionType::Allocated) {
-            if (neightbourType == RegionType::Free) {
-                freeList.Erase(*RgTr::AsFreeHeader(neightbour));
-            }
-            rgn = RgTr::MergeWithNext(neightbour);
-        }
-        neightbour = RgTr::GetNext(rgn);
-        neightbourType = RgTr::GetType(neightbour);
-        if (neightbour != rgn && neightbourType != RegionType::Allocated) {
-            if (neightbourType == RegionType::Free) {
-                freeList.Erase(*RgTr::AsFreeHeader(neightbour));
-            }
-            rgn = RgTr::MergeWithNext(rgn);
-        }
-        auto size = RgTr::GetSize(rgn);
-        if (size >= ChunkSize) {
-            RgTr::DeallocateChunk(rgn);
-        } else {
-            freeList.Insert(*RgTr::AsFreeHeader(rgn));
-        }
-    }
-
-    bool IsPOT(std::size_t val)
-    {
-        return !((val - 1) & val);
-    }
-
-    void* AllocateChecked(std::size_t size, std::size_t align) {
-        size += RgTr::ChunkGranularity;
-        Region* rgn;
-        if (size < ChunkTreshold) {
-            rgn = AllocateChunked(size, align);
-        } else {
-            rgn = RgTr::AllocateChunk(size, align);
-        }
-        if (rgn == nullptr) {
-            return nullptr;
-        }
-        auto ptr = ApplyOffset<unsigned char>(rgn, RgTr::ChunkGranularity);
-        return new(ptr) unsigned char[size];
-    }
-public:
-    MyAllocator()
-    {}
-    void* Allocate(std::size_t size, std::size_t align)
-    {
-        if (size == 0) {
-            return nullptr;
-        }
-        align = std::max(align, std::size_t(RgTr::ChunkGranularity));
-        size += RgTr::ChunkGranularity - 1;
-        size &= size ^ (RgTr::ChunkGranularity - 1);
-        if (!IsPOT(align) || size & (align - 1)) {
-            return nullptr;
-        }
-        return AllocateChecked(size, align);
-    }
-    void Deallocate(void* ptr)
-    {
-        if (ptr == nullptr) {
-            return;
-        }
-        auto rgn = ApplyOffset<Region>(ptr, -std::ptrdiff_t(RgTr::ChunkGranularity)); // TODO: Can region be small?
-        if (RgTr::GetType(rgn) == RegionType::BigAllocated) {
-            RgTr::DeallocateChunk(rgn);
-        } else {
-            DeallocateChunked(rgn);
-        }
-    }
-    void DumpList()
-    {
-        std::cout << "Dump\n";
-        for (auto &elem : freeList) {
-            auto rgn = RgTr::FromFreeHeader(AddressOf(elem));
-            std::cout << "Pointer: " << rgn;
-            std::cout << "\nSize: " << RgTr::GetSize(rgn);
-            std::cout << "\nPrev size: " << RgTr::GetPrevSize(rgn) << "\n\n";
-        }
-        flush(std::cout);
-    }
-    void PushChunk(void* ptr)
-    {
-        auto rgn = RgTr::AllocateIdentity(ptr);
-        rgn = RgTr::Retype(rgn, RegionType::Free);
-        freeList.Insert(ptr_cast<FreeHeader*>(rgn));
-    }
-private:
-    SizeTree freeList;
-};
-
-MyAllocator<RegionHeader> myAllocator;
+Allocator<RegionHeader> myAllocator;
 
 void* my_alloc(std::size_t size)
 {
@@ -468,21 +293,21 @@ int main(int argc, char* argv[])
     auto pint = new(my_alloc(sizeof(int))) int;
     *pint = 0x55AA;
     std::cout << pint << "\n";
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
     void* p = my_aligned_alloc(0x10000, 0x10000);
     std::cout << p << "\n";
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
     void* p2 = my_aligned_alloc(0x200000, 0x200000);
     std::cout << p2 << "\n";
     auto iptr = std::launder(static_cast<int*>(p2));
     for (auto i = 0; i < 1024; ++i) {
         iptr[i] = 0x55555555;
     }
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
     my_free(pint);
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
     my_free(p);
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
     my_free(p2);
-    myAllocator.DumpList();
+    //myAllocator.DumpList();
 }

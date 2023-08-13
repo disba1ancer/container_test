@@ -33,6 +33,7 @@ add_executable(container_test
 )
 
 add_executable(malloc_test
+    allocator.h
     avl_tree.h
     avl_tree_node.h
     bs_tree.h

@@ -65,8 +65,9 @@ private:
         switch (type) {
         case RegionType::SmallFree:
         case RegionType::Allocated:
-        case RegionType::BigAllocated:
             return new(ptr) RegionHeader;
+        case RegionType::BigAllocated:
+            return ptr_cast<RegionHeader*>(new(ptr) BigAllocHeader);
         case RegionType::Free:
             return ptr_cast<RegionHeader*>(new(ptr) FreeHeader);
         }
@@ -101,6 +102,7 @@ private:
     {
         auto rgn = ptr_cast<BigAllocHeader*>(Construct(ptr, RegionType::BigAllocated));
         rgn->allocOffset = offset;
+        rgn->header.type = RegionType::BigAllocated;
         rgn->header.isLast = true;
         rgn->header.size = size / ChunkGranularity;
         rgn->header.prev = (size / ChunkGranularity) >> SizeFieldSize;
@@ -119,8 +121,12 @@ public:
         auto bptr = ptr_cast<unsigned char*>(ptr) + allocStartOffset;
         VirtualAlloc(bptr, size, MEM_COMMIT, PAGE_READWRITE);
         RegionHeader* rgn = ConstructChunk(bptr, size, allocStartOffset);
-        Retype(rgn, RegionType::BigAllocated);
         return rgn;
+    }
+
+    static auto AllocateIdentity(void* ptr) -> RegionHeader*
+    {
+        return ConstructChunk(ptr, ChunkSize, 0);
     }
 
     static void DeallocateChunk(RegionHeader* rgn)
@@ -281,7 +287,7 @@ template <typename T>
 class MyAllocator {
     using Region = T;
     using RgTr = AllocatorRegionTraits<T>;
-    using FreeHeader = typename AllocatorRegionTraits<T>::FreeHeader;
+    using FreeHeader = typename RgTr::FreeHeader;
     static constexpr auto ChunkTreshold = RgTr::ChunkTreshold;
     static constexpr auto ChunkSize = RgTr::ChunkSize;
 
@@ -428,6 +434,12 @@ public:
             std::cout << "\nPrev size: " << RgTr::GetPrevSize(rgn) << "\n\n";
         }
         flush(std::cout);
+    }
+    void PushChunk(void* ptr)
+    {
+        auto rgn = RgTr::AllocateIdentity(ptr);
+        rgn = RgTr::Retype(rgn, RegionType::Free);
+        freeList.Insert(ptr_cast<FreeHeader*>(rgn));
     }
 private:
     SizeTree freeList;

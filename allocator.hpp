@@ -1,8 +1,8 @@
 #ifndef KERNEL_ALLOCATOR_H
 #define KERNEL_ALLOCATOR_H
 
-#include "avl_tree.h"
-#include "node.h"
+#include "avl_tree.hpp"
+#include "node.hpp"
 
 #define AddressOf std::addressof
 

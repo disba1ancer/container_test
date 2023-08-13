@@ -4,8 +4,8 @@
 #define NOMINMAX 1
 #include <windows.h>
 #include <utility>
-#include "allocator.h"
-#include "node.h"
+#include "allocator.hpp"
+#include "node.hpp"
 
 using container_test::ptr_cast;
 using container_test::As;

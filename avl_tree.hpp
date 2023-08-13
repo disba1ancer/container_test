@@ -4,8 +4,8 @@
 #include <cstddef>
 #include <utility>
 #include <stdexcept>
-#include "node.h"
-#include "avl_tree_node.h"
+#include "node.hpp"
+#include "avl_tree_node.hpp"
 
 #define AddressOf (::std::addressof)
 

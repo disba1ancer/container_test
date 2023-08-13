@@ -17,34 +17,34 @@ elseif(${COMPILER_COMPAT} MATCHES "MSVC")
 endif()
 
 add_executable(container_test
-    avl_tree.h
-    avl_tree_node.h
-    bs_tree.h
-    bs_tree_node.h
-    hash_table.h
-    list.h
-    list_node.h
+    avl_tree.hpp
+    avl_tree_node.hpp
+    bs_tree.hpp
+    bs_tree_node.hpp
+    hash_table.hpp
+    list.hpp
+    list_node.hpp
     main.cpp
-    node.h
-    oc_queue.h
-    slist.h
-    slist_node.h
-    util.h
+    node.hpp
+    oc_queue.hpp
+    slist.hpp
+    slist_node.hpp
+    util.hpp
 )
 
 add_executable(malloc_test
-    allocator.h
-    avl_tree.h
-    avl_tree_node.h
-    bs_tree.h
-    bs_tree_node.h
-    hash_table.h
-    list.h
-    list_node.h
+    allocator.hpp
+    avl_tree.hpp
+    avl_tree_node.hpp
+    bs_tree.hpp
+    bs_tree_node.hpp
+    hash_table.hpp
+    list.hpp
+    list_node.hpp
     mymalloc.cpp
-    node.h
-    oc_queue.h
-    slist.h
-    slist_node.h
-    util.h
+    node.hpp
+    oc_queue.hpp
+    slist.hpp
+    slist_node.hpp
+    util.hpp
 )

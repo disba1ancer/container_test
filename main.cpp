@@ -1,7 +1,7 @@
 #include <iostream>
-#include "hash_table.h"
-#include "avl_tree.h"
-#include "slist.h"
+#include "hash_table.hpp"
+#include "avl_tree.hpp"
+#include "slist.hpp"
 #include <string>
 
 using namespace std;

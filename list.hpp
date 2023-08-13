@@ -1,8 +1,8 @@
 #ifndef LIST_H
 #define LIST_H
 
-#include "node.h"
-#include "list_node.h"
+#include "node.hpp"
+#include "list_node.hpp"
 
 #define AddressOf (::std::addressof)
 

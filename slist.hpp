@@ -1,8 +1,8 @@
 #ifndef SLIST_H
 #define SLIST_H
 
-#include "node.h"
-#include "slist_node.h"
+#include "node.hpp"
+#include "slist_node.hpp"
 
 #define AddressOf (::std::addressof)
 

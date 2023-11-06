@@ -2,49 +2,61 @@
 #define OC_QUEUE_H
 
 #include <atomic>
+#include <utility>
 
 namespace container_test {
 
-struct OCQueueNode {
-    OCQueueNode* next;
+struct DVMPSCQueueNode {
+    std::atomic<DVMPSCQueueNode*> next;
 };
 
 // One consumer multiple producer queue
-struct OCQueue {
-    OCQueue() noexcept :
+struct DVMPSCQueue {
+    DVMPSCQueue() noexcept :
         guard{nullptr},
         head{&guard},
-        tail(&guard),
-        size(0)
+        tail(&guard)
     {}
-    void Push(OCQueueNode* newNode) noexcept
+    void Push(DVMPSCQueueNode* newNode) noexcept
     {
-        newNode->next = nullptr;
-        auto pPtr = tail.exchange(newNode, std::memory_order_acq_rel);
-        pPtr->next = newNode;
-        size.fetch_add(1, std::memory_order_release);
+        using o = std::memory_order;
+        newNode->next.store(nullptr, o::relaxed);
+        auto pPtr = tail.exchange(newNode, o::acq_rel);
+        pPtr->next.store(newNode, o::release);
     }
-    auto Pop() noexcept -> OCQueueNode*
+    auto Pop() noexcept -> DVMPSCQueueNode*
     {
-        if (size.load(std::memory_order_relaxed) == 0) {
+        using o = std::memory_order;
+        if (head == &guard) {
+            auto next = guard.next.load(o::relaxed);
+            if (next == nullptr) {
+                return nullptr;
+            }
+            PopIntern(next);
+        }
+        auto next = head->next.load(o::relaxed);
+        if (next != nullptr) {
+            return PopIntern(next);
+        }
+        if (head != tail.load(o::relaxed)) {
             return nullptr;
         }
-        while (true) {
-            size.fetch_sub(1, std::memory_order_acquire);
-            auto cur = head;
-            auto nPtr = cur->next;
-            head = nPtr;
-            if (cur != &guard) {
-                return cur;
-            }
-            Push(&guard);
+        Push(&guard);
+        next = head->next.load(o::relaxed);
+        if (next != nullptr) {
+            return PopIntern(next);
         }
+        return nullptr;
     }
 private:
-    OCQueueNode guard;
-    OCQueueNode* head;
-    std::atomic<OCQueueNode*> tail;
-    std::atomic_size_t size;
+    auto PopIntern(DVMPSCQueueNode* next) noexcept -> DVMPSCQueueNode*
+    {
+        std::atomic_thread_fence(std::memory_order::acquire);
+        return std::exchange(head, next);
+    }
+    DVMPSCQueueNode guard;
+    DVMPSCQueueNode* head;
+    std::atomic<DVMPSCQueueNode*> tail;
 };
 
 }

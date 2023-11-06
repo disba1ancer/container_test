@@ -48,3 +48,7 @@ add_executable(malloc_test
     slist_node.hpp
     util.hpp
 )
+
+add_executable(range_test
+    range_test.cpp
+)
